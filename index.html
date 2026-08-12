@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Closet Takeout - 옷장 스타일링 게임</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <h1>👗 Closet Takeout</h1>
+      <div class="coin-badge" id="coinDisplay">🪙 0</div>
+      <div class="mode-toggle" id="modeToggle">
+        <button class="mode-btn active" data-mode="free">자유 모드</button>
+        <button class="mode-btn" data-mode="challenge">챌린지 모드</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="stage-panel">
+        <div id="themeCard" class="theme-card hidden">
+          <div class="theme-icon" id="themeIcon">💼</div>
+          <div class="theme-text">
+            <div class="theme-name" id="themeName">테마</div>
+            <div class="theme-desc" id="themeDesc">설명</div>
+            <div class="theme-tags" id="themeTags"></div>
+          </div>
+          <button class="ghost-btn" id="nextThemeBtn">다음 테마 ▶</button>
+        </div>
+
+        <div class="stage-card">
+          <div class="skin-picker" id="skinPicker"></div>
+          <div class="bg-picker" id="bgPicker"></div>
+          <div class="shape-sliders" id="shapeSliders">
+            <div class="shape-row">
+              <label>키</label>
+              <input type="range" id="sliderHeight" min="92" max="106" step="1" value="100" />
+              <span class="shape-val" id="valHeight">100%</span>
+            </div>
+            <div class="shape-row">
+              <label>다리 길이</label>
+              <input type="range" id="sliderLeg" min="88" max="115" step="1" value="100" />
+              <span class="shape-val" id="valLeg">100%</span>
+            </div>
+            <div class="shape-row">
+              <label>다리 굵기</label>
+              <input type="range" id="sliderLegWidth" min="70" max="150" step="1" value="100" />
+              <span class="shape-val" id="valLegWidth">100%</span>
+            </div>
+            <div class="shape-row">
+              <label>가슴</label>
+              <input type="range" id="sliderChest" min="80" max="130" step="1" value="100" />
+              <span class="shape-val" id="valChest">100%</span>
+            </div>
+            <div class="shape-row">
+              <label>골반</label>
+              <input type="range" id="sliderHip" min="80" max="130" step="1" value="100" />
+              <span class="shape-val" id="valHip">100%</span>
+            </div>
+          </div>
+          <div class="stage-frame" id="stageFrame">
+            <svg id="character" viewBox="0 0 300 580" xmlns="http://www.w3.org/2000/svg"></svg>
+          </div>
+        </div>
+
+        <div class="stage-actions">
+          <button class="action-btn" id="randomBtn">🎲 랜덤 코디</button>
+          <button class="action-btn" id="resetBtn">↩️ 초기화</button>
+          <button class="action-btn" id="saveOutfitBtn">💾 코디 저장</button>
+          <button class="action-btn" id="screenshotBtn">📸 이미지 저장</button>
+          <button class="action-btn primary" id="scoreBtn">✨ 채점하기</button>
+        </div>
+
+        <div id="scorePanel" class="score-panel hidden">
+          <div class="stars" id="stars"></div>
+          <div class="score-text" id="scoreText"></div>
+          <div class="score-feedback" id="scoreFeedback"></div>
+        </div>
+      </section>
+
+      <section class="closet-panel">
+        <div class="tabs" id="categoryTabs">
+          <button class="tab active" data-cat="hair">헤어</button>
+          <button class="tab" data-cat="top">상의</button>
+          <button class="tab" data-cat="bottom">하의</button>
+          <button class="tab" data-cat="outer">아우터</button>
+          <button class="tab" data-cat="shoes">신발</button>
+          <button class="tab" data-cat="accessory">액세서리</button>
+        </div>
+
+        <div class="filter-row">
+          <input type="text" id="searchInput" class="search-input" placeholder="🔍 옷 이름으로 검색..." />
+        </div>
+        <div class="tag-filter-row" id="tagFilterRow"></div>
+
+        <div class="item-grid" id="itemGrid"></div>
+
+        <div class="color-row" id="colorRow"></div>
+
+        <div class="saved-outfits">
+          <div class="saved-header">
+            <h3>📖 룩북</h3>
+          </div>
+          <div class="saved-grid" id="savedGrid">
+            <p class="empty-note">아직 저장한 코디가 없어요.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <div class="lookbook-modal hidden" id="lookbookModal">
+    <div class="lookbook-inner">
+      <button class="lookbook-close" id="lookbookClose">✕</button>
+      <div class="lookbook-body">
+        <button class="lookbook-nav" id="lookbookPrev">◀</button>
+        <div class="lookbook-stage">
+          <svg id="lookbookSvg" viewBox="0 0 300 580" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+        <button class="lookbook-nav" id="lookbookNext">▶</button>
+      </div>
+      <div class="lookbook-meta">
+        <div class="lookbook-name" id="lookbookName"></div>
+        <div class="lookbook-date" id="lookbookDate"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
