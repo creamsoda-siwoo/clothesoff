@@ -365,6 +365,8 @@ const ITEMS = {
       draw: (c) => skirtShape(c, G.waistY + 60, 22) },
     { id: "pencil", name: "H라인 스커트", emoji: "📎", tags: ["formal", "glam"], colors: NEUTRALS,
       draw: (c) => skirtShape(c, G.waistY + 130, 4) },
+    { id: "midiskirt", name: "미디스커트", emoji: "🥻", tags: ["formal", "cute"], colors: [...PASTELS, ...NEUTRALS],
+      draw: (c) => skirtShape(c, G.waistY + 95, 16) },
     { id: "joggers", name: "트레이닝 팬츠", emoji: "🏃", tags: ["sporty", "comfy"], colors: [...NEUTRALS, ...BRIGHTS],
       draw: (c) => pantsShape(c, G.ankleY - 30, rrect(G.legLX - 5, G.ankleY - 46, G.legW + 10, 20, 8, shade(c, -25)) + rrect(G.legRX - 5, G.ankleY - 46, G.legW + 10, 20, 8, shade(c, -25))) },
     { id: "pleats", name: "롱 플리츠 스커트", emoji: "🌸", tags: ["formal", "cute"], colors: PASTELS,
