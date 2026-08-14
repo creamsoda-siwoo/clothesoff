@@ -54,7 +54,7 @@ function computeGeometry(shape) {
   const hipClothX = headCx - hipClothW / 2;
 
   const armW = 21;
-  const armGap = 10;
+  const armGap = 5;
   const armLX = headCx - shoulderW / 2 - armGap - armW;
   const armRX = headCx + shoulderW / 2 + armGap;
   const armY = torsoTop + 4;
@@ -116,11 +116,65 @@ function torsoPath(cx, top, bottom, shoulderW, chestW, hipW) {
     C${wR},${m2} ${cR},${m2} ${cR},${chestY}
     C${cR},${m1} ${sR},${m1} ${sR},${top} Z`;
 }
-function limbShape(cx, topW, botW, yTop, yBot, fill) {
-  return `${ellipse(cx, yTop, topW / 2, topW * 0.3, fill)}${poly(
-    `${cx - topW / 2},${yTop} ${cx + topW / 2},${yTop} ${cx + botW / 2},${yBot} ${cx - botW / 2},${yBot}`,
-    fill
-  )}`;
+// smooth tapered "tube" silhouette (used for arms, legs, and fitted sleeves/pants)
+// so limbs read as rounded flesh/fabric instead of a straight-edged trapezoid.
+function tubeD(cx, topW, botW, yTop, yBot, bulge = 0.08) {
+  const midY = yTop + (yBot - yTop) * 0.38;
+  const midW = topW + (botW - topW) * 0.25 + Math.max(topW, botW) * bulge;
+  const tL = cx - topW / 2, tR = cx + topW / 2;
+  const mL = cx - midW / 2, mR = cx + midW / 2;
+  const bL = cx - botW / 2, bR = cx + botW / 2;
+  const m1 = yTop + (midY - yTop) * 0.55;
+  const m2 = midY + (yBot - midY) * 0.5;
+  return `M${tL},${yTop}
+    C${tL},${m1} ${mL},${m1} ${mL},${midY}
+    C${mL},${m2} ${bL},${m2} ${bL},${yBot}
+    L${bR},${yBot}
+    C${bR},${m2} ${mR},${m2} ${mR},${midY}
+    C${mR},${m1} ${tR},${m1} ${tR},${yTop} Z`;
+}
+function tube(cx, topW, botW, yTop, yBot, fill, bulge = 0.08) {
+  return pathEl(tubeD(cx, topW, botW, yTop, yBot, bulge), fill);
+}
+
+// smooth garment torso following the body curve (shoulder -> chest -> hem) with an
+// "ease" allowance, instead of a bounding rectangle sitting on top of the body.
+function garmentTorso(cx, top, hem, shoulderW, chestW, hemW, fill, ease = 6) {
+  const chestY = top + (hem - top) * 0.32;
+  const sL = cx - shoulderW / 2 - ease, sR = cx + shoulderW / 2 + ease;
+  const cL = cx - chestW / 2 - ease, cR = cx + chestW / 2 + ease;
+  const hL = cx - hemW / 2 - ease, hR = cx + hemW / 2 + ease;
+  const m1 = top + (chestY - top) * 0.55;
+  const m2 = chestY + (hem - chestY) * 0.5;
+  const r = Math.min(10, shoulderW * 0.15);
+  const d = `M${sL + r},${top}
+    Q${sL},${top} ${sL},${top + r}
+    C${sL},${m1} ${cL},${m1} ${cL},${chestY}
+    C${cL},${m2} ${hL},${m2} ${hL},${hem}
+    L${hR},${hem}
+    C${hR},${m2} ${cR},${m2} ${cR},${chestY}
+    C${cR},${m1} ${sR},${m1} ${sR},${top + r}
+    Q${sR},${top} ${sR - r},${top} Z`;
+  return pathEl(d, fill);
+}
+
+// one half-panel of an open-front jacket: curved outer edge follows the body,
+// inner edge runs down the front opening so a gap of `gapHalf` shows between panels.
+function jacketPanel(cx, top, hem, shoulderHalfW, chestHalfW, hemHalfW, gapHalf, side, fill, ease = 6) {
+  const outTop = cx + side * (shoulderHalfW + ease);
+  const chestY = top + (hem - top) * 0.3;
+  const outChest = cx + side * (chestHalfW + ease);
+  const outHem = cx + side * (hemHalfW + ease);
+  const inTop = cx + side * (gapHalf + 8);
+  const inHem = cx + side * gapHalf;
+  const m1 = top + (chestY - top) * 0.55;
+  const m2 = chestY + (hem - chestY) * 0.5;
+  const d = `M${inTop},${top}
+    L${outTop},${top}
+    C${outTop},${m1} ${outChest},${m1} ${outChest},${chestY}
+    C${outChest},${m2} ${outHem},${m2} ${outHem},${hem}
+    L${inHem},${hem} Z`;
+  return pathEl(d, fill);
 }
 
 function skinDefs(skin, uid) {
@@ -167,8 +221,8 @@ function bodyLowerSVG(uid, skinHex) {
   const dark = shade(skinHex, -25);
   const cxL = G.legLX + G.legW / 2, cxR = G.legRX + G.legW / 2;
   return `
-    ${limbShape(cxL, G.legW * 1.15, G.legW * 0.8, G.waistY, G.ankleY, grad)}
-    ${limbShape(cxR, G.legW * 1.15, G.legW * 0.8, G.waistY, G.ankleY, grad)}
+    ${tube(cxL, G.legW * 1.2, G.legW * 0.78, G.waistY, G.ankleY, grad, 0.1)}
+    ${tube(cxR, G.legW * 1.2, G.legW * 0.78, G.waistY, G.ankleY, grad, 0.1)}
     ${ellipse(G.footLCx, G.footCy, 17, 10, grad)}
     ${ellipse(G.footRCx, G.footCy, 17, 10, grad)}
     ${lineEl(G.footLCx - 9, G.footCy + 6, G.footLCx + 11, G.footCy + 6, dark, 1, 'opacity="0.4"')}
@@ -182,8 +236,8 @@ function bodyUpperSVG(uid, skinHex) {
   const dark = shade(skinHex, -28);
   const cxL = G.armLX + G.armW / 2, cxR = G.armRX + G.armW / 2;
   return `
-    ${limbShape(cxL, G.armW, G.armW * 0.8, G.armY, G.armBottom, grad)}
-    ${limbShape(cxR, G.armW, G.armW * 0.8, G.armY, G.armBottom, grad)}
+    ${tube(cxL, G.armW * 1.1, G.armW * 0.8, G.armY, G.armBottom, grad, 0.1)}
+    ${tube(cxR, G.armW * 1.1, G.armW * 0.8, G.armY, G.armBottom, grad, 0.1)}
     ${ellipse(G.handLCx, G.handCy, G.armW * 0.46, G.armW * 0.62, grad)}
     ${ellipse(G.handRCx, G.handCy, G.armW * 0.46, G.armW * 0.62, grad)}
     ${lineEl(G.handLCx - 4, G.handCy - 7, G.handLCx - 4, G.handCy + 2, dark, 1, 'opacity="0.45"')}
@@ -198,33 +252,43 @@ function bodyUpperSVG(uid, skinHex) {
 }
 
 // ---------- clothing shape builders ----------
-function sleeves(color, sleeveEnd, widen = 6) {
+function sleeves(color, sleeveEnd, widen = 4) {
   if (sleeveEnd <= G.armY) {
-    return rrect(G.torsoX + 14, G.torsoTop - 2, 14, 18, 5, color) + rrect(G.torsoX + G.torsoW - 28, G.torsoTop - 2, 14, 18, 5, color);
+    return rrect(G.torsoX + 14, G.torsoTop - 2, 14, 18, 7, color) + rrect(G.torsoX + G.torsoW - 28, G.torsoTop - 2, 14, 18, 7, color);
   }
-  return (
-    rrect(G.armLX - widen / 2, G.armY - 2, G.armW + widen, sleeveEnd - G.armY, 14, color) +
-    rrect(G.armRX - widen / 2, G.armY - 2, G.armW + widen, sleeveEnd - G.armY, 14, color)
-  );
+  const topW = G.armW + widen + 8;
+  const botW = G.armW * 0.8 + widen * 0.6;
+  const cxL = G.armLX + G.armW / 2, cxR = G.armRX + G.armW / 2;
+  return tube(cxL, topW, botW, G.armY - 6, sleeveEnd, color, 0.1) + tube(cxR, topW, botW, G.armY - 6, sleeveEnd, color, 0.1);
 }
 function topShape(color, hem, sleeveEnd, extra = "") {
-  return `${sleeves(color, sleeveEnd)}${rrect(G.torsoX - 6, G.torsoTop - 4, G.torsoW + 12, hem - (G.torsoTop - 4), 22, color)}${extra}`;
+  const hemW = hem - G.waistY > 8 ? G.hipW + 14 : G.chestW * 0.88;
+  return `${sleeves(color, sleeveEnd)}${garmentTorso(G.headCx, G.torsoTop - 4, hem, G.shoulderW, G.chestW, hemW, color)}${extra}`;
 }
 function skirtShape(color, hem, flare = 26, extra = "") {
-  return `${poly(`${G.hipClothX - 4},${G.waistY} ${G.hipClothX + G.hipClothW + 4},${G.waistY} ${G.hipClothX + G.hipClothW + 4 + flare},${hem} ${G.hipClothX - 4 - flare},${hem}`, color)}${extra}`;
+  const topL = G.hipClothX - 4, topR = G.hipClothX + G.hipClothW + 4;
+  const botL = topL - flare, botR = topR + flare;
+  const midY = G.waistY + (hem - G.waistY) * 0.55;
+  const midL = topL - flare * 0.45, midR = topR + flare * 0.45;
+  const d = `M${topL},${G.waistY}
+    L${topR},${G.waistY}
+    Q${midR},${midY} ${botR},${hem}
+    L${botL},${hem}
+    Q${midL},${midY} ${topL},${G.waistY} Z`;
+  return `${pathEl(d, color)}${extra}`;
 }
 function dressShape(color, hem, flare, sleeveEnd, extra = "") {
-  return `${sleeves(color, sleeveEnd)}${rrect(G.torsoX - 6, G.torsoTop - 4, G.torsoW + 12, G.waistY - (G.torsoTop - 4) + 6, 22, color)}${skirtShape(color, hem, flare)}${extra}`;
+  return `${sleeves(color, sleeveEnd)}${garmentTorso(G.headCx, G.torsoTop - 4, G.waistY + 6, G.shoulderW, G.chestW, G.hipW + 6, color)}${skirtShape(color, hem, flare)}${extra}`;
 }
 function pantsShape(color, hem, extra = "") {
-  return `${rrect(G.legLX - 3, G.waistY, G.legW + 6, hem - G.waistY, 14, color)}${rrect(G.legRX - 3, G.waistY, G.legW + 6, hem - G.waistY, 14, color)}${extra}`;
+  const topW = G.legW + 12, botW = G.legW * 0.86 + 6;
+  const cxL = G.legLX + G.legW / 2, cxR = G.legRX + G.legW / 2;
+  return `${tube(cxL, topW, botW, G.waistY - 4, hem, color, 0.06)}${tube(cxR, topW, botW, G.waistY - 4, hem, color, 0.06)}${extra}`;
 }
 function outerShape(color, hem, sleeveEnd, gap = 10) {
-  const halfW = G.torsoW / 2;
-  const leftX = G.torsoX - 6, leftW = halfW - gap / 2 + 6;
-  const rightX = G.headCx + gap / 2, rightW = halfW - gap / 2 + 6;
-  const top = G.torsoTop - 4;
-  return `${sleeves(color, sleeveEnd, 8)}${rrect(leftX, top, leftW, hem - top, 18, color)}${rrect(rightX, top, rightW, hem - top, 18, color)}`;
+  const hemHalfW = (hem - G.waistY > 8 ? G.hipW + 12 : G.chestW * 0.92) / 2;
+  const cx = G.headCx, top = G.torsoTop - 4;
+  return `${sleeves(color, sleeveEnd, 8)}${jacketPanel(cx, top, hem, G.shoulderW / 2, G.chestW / 2, hemHalfW, gap / 2, -1, color)}${jacketPanel(cx, top, hem, G.shoulderW / 2, G.chestW / 2, hemHalfW, gap / 2, 1, color)}`;
 }
 function shoeShape(color, style) {
   const L = G.footLCx, R = G.footRCx, y = G.footCy, ankle = G.ankleY;
@@ -372,9 +436,9 @@ const ITEMS = {
     { id: "pleats", name: "롱 플리츠 스커트", emoji: "🌸", tags: ["formal", "cute"], colors: PASTELS,
       draw: (c) => skirtShape(c, G.ankleY - 40, 30, lineEl(G.hipClothX + 16, G.waistY + 20, G.hipClothX + 6, G.ankleY - 42, shade(c, -20), 1.2) + lineEl(G.headCx, G.waistY + 20, G.headCx, G.ankleY - 38, shade(c, -20), 1.2) + lineEl(G.hipClothX + G.hipClothW - 16, G.waistY + 20, G.hipClothX + G.hipClothW - 6, G.ankleY - 42, shade(c, -20), 1.2)) },
     { id: "wideleg", name: "와이드 팬츠", emoji: "👖", tags: ["formal", "casual"], colors: [...NEUTRALS, ...PASTELS],
-      draw: (c) => rrect(G.legLX - 10, G.waistY, G.legW + 20, G.ankleY - G.waistY, 14, c) + rrect(G.legRX - 10, G.waistY, G.legW + 20, G.ankleY - G.waistY, 14, c) },
+      draw: (c) => tube(G.legLX + G.legW / 2, G.legW + 20, G.legW + 26, G.waistY, G.ankleY, c, 0.02) + tube(G.legRX + G.legW / 2, G.legW + 20, G.legW + 26, G.waistY, G.ankleY, c, 0.02) },
     { id: "leggings", name: "레깅스", emoji: "🤸", tags: ["sporty", "comfy"], colors: [...NEUTRALS, ...BRIGHTS],
-      draw: (c) => rrect(G.legLX - 1, G.waistY, G.legW + 2, G.ankleY - G.waistY, 12, c) + rrect(G.legRX - 1, G.waistY, G.legW + 2, G.ankleY - G.waistY, 12, c) +
+      draw: (c) => tube(G.legLX + G.legW / 2, G.legW + 4, G.legW * 0.9, G.waistY, G.ankleY, c, 0.04) + tube(G.legRX + G.legW / 2, G.legW + 4, G.legW * 0.9, G.waistY, G.ankleY, c, 0.04) +
         lineEl(G.legLX, G.waistY + 10, G.legLX, G.ankleY - 10, shade(c, 32), 1.5) + lineEl(G.legRX + G.legW, G.waistY + 10, G.legRX + G.legW, G.ankleY - 10, shade(c, 32), 1.5) },
   ],
 
