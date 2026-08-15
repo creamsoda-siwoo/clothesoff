@@ -634,7 +634,7 @@ function renderCharacter(sel = state.selections, skin = state.skin, shapePct = s
 }
 
 function paintStage() {
-  document.getElementById("character").innerHTML = renderCharacter();
+  if (window.Character3D) window.Character3D.update(state.selections, state.skin, state.bodyShape);
 }
 
 // ---------- UI: skin picker ----------
@@ -1038,34 +1038,19 @@ function buildLookbookControls() {
 
 // ---------- screenshot export ----------
 function exportScreenshot() {
-  const svgEl = document.getElementById("character");
-  const clone = svgEl.cloneNode(true);
-  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  clone.setAttribute("width", "600");
-  clone.setAttribute("height", "1160");
+  const canvas3d = window.Character3D && window.Character3D.getCanvas();
+  if (!canvas3d) return;
   const bgColor = (BACKGROUNDS.find((b) => b.id === state.background) || BACKGROUNDS[0]).swatch;
-  const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-  bg.setAttribute("x", "0"); bg.setAttribute("y", "0");
-  bg.setAttribute("width", "300"); bg.setAttribute("height", "580");
-  bg.setAttribute("fill", bgColor);
-  clone.insertBefore(bg, clone.firstChild);
-
-  const svgStr = new XMLSerializer().serializeToString(clone);
-  const svgBlob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(svgBlob);
-  const img = new Image();
-  img.onload = () => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 600; canvas.height = 1160;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0, 600, 1160);
-    URL.revokeObjectURL(url);
-    const a = document.createElement("a");
-    a.download = "my-outfit.png";
-    a.href = canvas.toDataURL("image/png");
-    a.click();
-  };
-  img.src = url;
+  const canvas = document.createElement("canvas");
+  canvas.width = 600; canvas.height = 1160;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, 600, 1160);
+  ctx.drawImage(canvas3d, 0, 0, 600, 1160);
+  const a = document.createElement("a");
+  a.download = "my-outfit.png";
+  a.href = canvas.toDataURL("image/png");
+  a.click();
 }
 
 // ---------- init ----------

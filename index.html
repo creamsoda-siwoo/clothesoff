@@ -60,7 +60,7 @@
             </div>
           </div>
           <div class="stage-frame" id="stageFrame">
-            <svg id="character" viewBox="0 0 300 580" xmlns="http://www.w3.org/2000/svg"></svg>
+            <div id="character" class="character-stage" title="드래그해서 회전해보세요"></div>
           </div>
         </div>
 
@@ -129,6 +129,14 @@
     </div>
   </div>
 
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three.module.min.js"
+    }
+  }
+  </script>
   <script src="app.js"></script>
+  <script type="module" src="character3d.js"></script>
 </body>
 </html>

@@ -197,7 +197,18 @@ body {
   padding: 10px;
 }
 
-#character { width: 100%; max-width: 320px; height: auto; display: block; margin: 0 auto; }
+#character {
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 300 / 580;
+  display: block;
+  margin: 0 auto;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: grab;
+}
+#character:active { cursor: grabbing; }
+#character canvas { width: 100%; height: 100%; display: block; }
 
 .stage-actions {
   display: flex;
