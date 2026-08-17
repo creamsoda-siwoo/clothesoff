@@ -26,13 +26,18 @@ function makeToX(headCxPx) {
 const BODY_DEPTH = 0.8;
 const LIMB_DEPTH = 0.88;
 
-function latheFromKeypoints(keypoints, color, opts = {}) {
+function latheGeoFromKeypoints(keypoints, segments = 28) {
   const pts = keypoints.map((k) => new THREE.Vector2(Math.max(0.015, k.r), k.y));
   const spline = new THREE.SplineCurve(pts);
   const sampled = spline.getPoints(Math.max(10, keypoints.length * 6));
-  const geo = new THREE.LatheGeometry(sampled, opts.segments || 28);
+  const geo = new THREE.LatheGeometry(sampled, segments);
   geo.computeVertexNormals();
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.68, metalness: 0.04, side: THREE.DoubleSide });
+  return geo;
+}
+
+function latheFromKeypoints(keypoints, color, opts = {}) {
+  const geo = latheGeoFromKeypoints(keypoints, opts.segments || 28);
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.03, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.scale.z = opts.depth ?? BODY_DEPTH;
   return mesh;
@@ -126,54 +131,65 @@ const HAIR_CFG = {
 };
 
 // ---------- category builders ----------
+// soft, slightly glossy "skin" material shared by every flesh-tone part
+function skinMaterial(skin) {
+  return new THREE.MeshPhysicalMaterial({
+    color: skin, roughness: 0.42, metalness: 0, clearcoat: 0.12, clearcoatRoughness: 0.55, sheen: 0.15, sheenColor: 0xffffff,
+  });
+}
+
 function buildBody(ctx, skin) {
   const { G, toX, toY } = ctx;
   const group = new THREE.Group();
-  const mat = () => new THREE.MeshStandardMaterial({ color: skin, roughness: 0.55, metalness: 0.02 });
+  const mat = skinMaterial(skin);
 
-  // torso (shoulder -> chest -> waist -> hip), lathe-revolved for a real rounded body
+  // torso (shoulder -> chest -> waist -> hip), lathe-revolved for a real rounded body;
+  // waist pulled in a bit further than the 2D silhouette for a softer hourglass line
   const chestYpx = G.torsoTop + (G.waistY - G.torsoTop) * 0.26;
   const waistYpx = G.torsoTop + (G.waistY - G.torsoTop) * 0.6;
-  const torso = latheFromKeypoints(
-    [
-      { y: toY(G.torsoTop), r: px(G.shoulderW / 2) },
-      { y: toY(chestYpx), r: px(G.chestW / 2) },
-      { y: toY(waistYpx), r: px(28) },
-      { y: toY(G.waistY), r: px(G.hipW / 2) },
-    ],
-    skin
-  );
+  const torsoGeo = latheGeoFromKeypoints([
+    { y: toY(G.torsoTop), r: px(G.shoulderW / 2) },
+    { y: toY(chestYpx), r: px(G.chestW / 2) },
+    { y: toY(waistYpx), r: px(23) },
+    { y: toY(G.waistY), r: px(G.hipW / 2) },
+  ]);
+  const torso = new THREE.Mesh(torsoGeo, mat);
+  torso.scale.z = BODY_DEPTH;
   group.add(torso);
 
   const neckR = px(G.neckW / 2);
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(neckR * 1.05, neckR, px(G.neckH), 16), mat());
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(neckR * 1.03, neckR * 0.94, px(G.neckH), 20), mat);
   neck.position.set(0, (toY(G.neckY) + toY(G.neckY + G.neckH)) / 2, 0);
   group.add(neck);
 
   const headR = px((G.headRx + G.headRy) / 2);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(headR, 24, 18), mat());
-  head.scale.set(G.headRx / ((G.headRx + G.headRy) / 2), G.headRy / ((G.headRx + G.headRy) / 2), 1);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(headR, 36, 28), mat);
+  // slightly narrower jaw / softer taper than a plain ellipsoid for a prettier face shape
+  head.scale.set(G.headRx / ((G.headRx + G.headRy) / 2) * 0.98, G.headRy / ((G.headRx + G.headRy) / 2), 0.92);
   head.position.set(0, toY(G.headCy), 0);
   group.add(head);
 
   const cxL = toX(G.armLX + G.armW / 2), cxR = toX(G.armRX + G.armW / 2);
-  const armTopR = px(G.armW * 0.58), armBotR = px(G.armW * 0.42);
+  const armTopR = px(G.armW * 0.52), armBotR = px(G.armW * 0.36);
   [cxL, cxR].forEach((cx, i) => {
     const arm = tubeMesh(cx, armTopR, armBotR, toY(G.armY), toY(G.armBottom), skin);
-    arm.rotation.z = i === 0 ? 0.1 : -0.1;
+    arm.material = mat;
+    arm.rotation.z = i === 0 ? 0.09 : -0.09;
     group.add(arm);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(px(G.armW * 0.42), 14, 12), mat());
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(px(G.armW * 0.38), 16, 14), mat);
+    hand.scale.set(0.85, 1.1, 0.75);
     hand.position.set(cx + (i === 0 ? -0.05 : 0.05), toY(G.handCy), 0);
     group.add(hand);
   });
 
   const cxLL = toX(G.legLX + G.legW / 2), cxRL = toX(G.legRX + G.legW / 2);
-  const legTopR = px(G.legW * 0.62), legBotR = px(G.legW * 0.42);
+  const legTopR = px(G.legW * 0.58), legBotR = px(G.legW * 0.38);
   [cxLL, cxRL].forEach((cx) => {
     const leg = tubeMesh(cx, legTopR, legBotR, toY(G.waistY), toY(G.ankleY), skin);
+    leg.material = mat;
     group.add(leg);
-    const foot = new THREE.Mesh(new THREE.SphereGeometry(px(20), 12, 10), mat());
-    foot.scale.set(1, 0.55, 1.5);
+    const foot = new THREE.Mesh(new THREE.SphereGeometry(px(19), 16, 12), mat);
+    foot.scale.set(1, 0.5, 1.55);
     foot.position.set(cx, toY(G.footCy), px(6));
     group.add(foot);
   });
@@ -181,27 +197,64 @@ function buildBody(ctx, skin) {
   return group;
 }
 
-function buildFace(ctx, skin) {
+function buildFace(ctx, skin, browColor) {
   const { G, toY } = ctx;
   const group = new THREE.Group();
   const headR = px((G.headRx + G.headRy) / 2);
   const hy = toY(G.headCy);
-  const eyeMat = new THREE.MeshStandardMaterial({ color: "#3a3346", roughness: 0.4 });
-  const cheekMat = new THREE.MeshStandardMaterial({ color: "#ffb4c6", roughness: 0.8, transparent: true, opacity: 0.5 });
+
+  const irisMat = new THREE.MeshPhysicalMaterial({ color: "#4a3b52", roughness: 0.25, clearcoat: 0.6, clearcoatRoughness: 0.15 });
+  const pupilMat = new THREE.MeshStandardMaterial({ color: "#241b28", roughness: 0.3 });
+  const sparkleMat = new THREE.MeshBasicMaterial({ color: "#ffffff" });
+  const browMat = new THREE.MeshStandardMaterial({ color: browColor || "#3a2a20", roughness: 0.6 });
+  const cheekMat = new THREE.MeshStandardMaterial({ color: "#ffb4c6", roughness: 0.8, transparent: true, opacity: 0.42 });
+  const lipMat = new THREE.MeshPhysicalMaterial({ color: "#c97b8c", roughness: 0.3, clearcoat: 0.4, clearcoatRoughness: 0.3 });
+
   [-1, 1].forEach((side) => {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(headR * 0.11, 10, 8), eyeMat);
-    eye.position.set(side * headR * 0.4, hy + headR * 0.08, headR * 1.01);
-    group.add(eye);
-    const cheek = new THREE.Mesh(new THREE.CircleGeometry(headR * 0.16, 12), cheekMat);
-    cheek.position.set(side * headR * 0.6, hy - headR * 0.18, headR * 0.95);
+    const eyeX = side * headR * 0.38, eyeY = hy + headR * 0.08, eyeZ = headR * 1.0;
+
+    // slightly taller-than-wide iris/pupil for a bigger, prettier eye shape
+    const iris = new THREE.Mesh(new THREE.SphereGeometry(headR * 0.13, 12, 10), irisMat);
+    iris.scale.set(1, 1.18, 0.55);
+    iris.position.set(eyeX, eyeY, eyeZ);
+    group.add(iris);
+
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(headR * 0.065, 10, 8), pupilMat);
+    pupil.scale.set(1, 1.18, 0.4);
+    pupil.position.set(eyeX, eyeY, eyeZ + headR * 0.03);
+    group.add(pupil);
+
+    const sparkle = new THREE.Mesh(new THREE.SphereGeometry(headR * 0.028, 8, 6), sparkleMat);
+    sparkle.position.set(eyeX - side * headR * 0.04, eyeY + headR * 0.05, eyeZ + headR * 0.05);
+    group.add(sparkle);
+
+    // eyebrow: a thin curved arc sitting above the eye
+    const brow = new THREE.Mesh(new THREE.TorusGeometry(headR * 0.16, headR * 0.022, 6, 12, Math.PI * 0.75), browMat);
+    brow.position.set(eyeX, eyeY + headR * 0.24, headR * 0.93);
+    brow.rotation.z = Math.PI * 0.62;
+    brow.rotation.y = side * 0.15;
+    group.add(brow);
+
+    const cheek = new THREE.Mesh(new THREE.CircleGeometry(headR * 0.15, 12), cheekMat);
+    cheek.position.set(side * headR * 0.58, hy - headR * 0.2, headR * 0.94);
     group.add(cheek);
   });
-  const mouth = new THREE.Mesh(
-    new THREE.BoxGeometry(headR * 0.42, headR * 0.06, headR * 0.06),
-    new THREE.MeshStandardMaterial({ color: "#a35a6b" })
-  );
-  mouth.position.set(0, hy - headR * 0.38, headR * 1.02);
-  group.add(mouth);
+
+  // small soft nose bump
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(headR * 0.05, 8, 6), skinMaterial(skin));
+  nose.position.set(0, hy - headR * 0.06, headR * 1.03);
+  group.add(nose);
+
+  // fuller lips: two stacked rounded slivers instead of a flat bar
+  const upperLip = new THREE.Mesh(new THREE.SphereGeometry(headR * 0.15, 12, 8), lipMat);
+  upperLip.scale.set(1.3, 0.32, 0.45);
+  upperLip.position.set(0, hy - headR * 0.35, headR * 1.0);
+  group.add(upperLip);
+  const lowerLip = new THREE.Mesh(new THREE.SphereGeometry(headR * 0.13, 12, 8), lipMat);
+  lowerLip.scale.set(1.15, 0.34, 0.5);
+  lowerLip.position.set(0, hy - headR * 0.42, headR * 1.0);
+  group.add(lowerLip);
+
   return group;
 }
 
@@ -209,13 +262,13 @@ function buildHair(ctx, id, color) {
   const { G, toY } = ctx;
   const cfg = HAIR_CFG[id] || HAIR_CFG.bob;
   const group = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
+  const mat = new THREE.MeshPhysicalMaterial({ color, roughness: 0.32, clearcoat: 0.25, clearcoatRoughness: 0.4 });
   const headR = px((G.headRx + G.headRy) / 2);
   const hy = toY(G.headCy);
 
   // anchor the dome's own top pole just above the head, regardless of cap fraction
   const capRadius = headR * (cfg.capScale || 1.12);
-  const cap = new THREE.Mesh(new THREE.SphereGeometry(capRadius, 20, 14, 0, Math.PI * 2, 0, Math.PI * cfg.cap), mat);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(capRadius, 28, 20, 0, Math.PI * 2, 0, Math.PI * cfg.cap), mat);
   cap.position.set(0, hy + headR * 1.12 - capRadius, 0);
   group.add(cap);
 
@@ -418,6 +471,9 @@ function initScene() {
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(1);
   renderer.setSize(600, 1160, false);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.08;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
   canvas = renderer.domElement;
   canvas.style.width = "100%";
   canvas.style.height = "100%";
@@ -426,13 +482,16 @@ function initScene() {
   container.innerHTML = "";
   container.appendChild(canvas);
 
-  scene.add(new THREE.HemisphereLight(0xfff3ea, 0xd9c8e8, 1.0));
-  const key = new THREE.DirectionalLight(0xffffff, 0.9);
-  key.position.set(3, 6, 5);
+  scene.add(new THREE.HemisphereLight(0xfff6ea, 0xdcd0ea, 0.85));
+  const key = new THREE.DirectionalLight(0xfff1de, 0.95);
+  key.position.set(2.6, 6, 5.5);
   scene.add(key);
-  const fill = new THREE.DirectionalLight(0xffffff, 0.32);
-  fill.position.set(-4, 3, 3);
+  const fill = new THREE.DirectionalLight(0xdfe8ff, 0.4);
+  fill.position.set(-4, 2.5, 3);
   scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xffe6f2, 0.5);
+  rim.position.set(-1, 4, -6);
+  scene.add(rim);
 
   characterGroup = new THREE.Group();
   scene.add(characterGroup);
@@ -513,7 +572,7 @@ function update(sel, skin, shapePct) {
     const outerMesh = buildOuter(ctx, sel.outer.id, sel.outer.color, sel.top.color);
     if (outerMesh) characterGroup.add(outerMesh);
   }
-  characterGroup.add(buildFace(ctx, skin));
+  characterGroup.add(buildFace(ctx, skin, sel.hair.color));
   const acc = buildAccessory(ctx, sel.accessory.id, sel.accessory.color);
   if (acc) characterGroup.add(acc);
 
