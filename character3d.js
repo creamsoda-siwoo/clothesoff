@@ -579,9 +579,33 @@ function update(sel, skin, shapePct) {
   renderer.render(scene, camera);
 }
 
+function getRotationY() {
+  return rotY;
+}
+
+function setRotationY(angle) {
+  rotY = angle || 0;
+  lastInteraction = performance.now();
+}
+
+// small snapshot of the CURRENT frame (whatever angle it's rotated to) for
+// saved-outfit thumbnails/lookbook, distinct from the full-res screenshot export
+function captureThumbnail(width = 220, height = 426) {
+  if (!canvas) return null;
+  const off = document.createElement("canvas");
+  off.width = width;
+  off.height = height;
+  const ctx2d = off.getContext("2d");
+  ctx2d.drawImage(canvas, 0, 0, width, height);
+  return off.toDataURL("image/png");
+}
+
 initScene();
 
 window.Character3D = {
   update,
   getCanvas: () => canvas,
+  getRotationY,
+  setRotationY,
+  captureThumbnail,
 };

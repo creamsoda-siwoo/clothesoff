@@ -937,12 +937,26 @@ const STORAGE_KEY = "closetakeout_saves";
 function getSaves() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; }
 }
-function setSaves(list) { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); }
+function setSaves(list) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  } catch {
+    // thumbnail images can push this over the localStorage quota; retry
+    // without them, then fall back to keeping only the newest half.
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(list.map((s) => ({ ...s, thumbnail: null }))));
+    } catch {
+      const trimmed = list.slice(0, Math.max(1, Math.floor(list.length / 2))).map((s) => ({ ...s, thumbnail: null }));
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed)); } catch { /* give up silently */ }
+    }
+  }
+}
 
 function saveOutfit() {
   const name = prompt("코디 이름을 입력하세요", `내 코디 ${getSaves().length + 1}`);
   if (!name) return;
   const saves = getSaves();
+  const c3d = window.Character3D;
   saves.unshift({
     id: Date.now().toString(),
     name,
@@ -950,6 +964,8 @@ function saveOutfit() {
     background: state.background,
     bodyShape: JSON.parse(JSON.stringify(state.bodyShape)),
     selections: JSON.parse(JSON.stringify(state.selections)),
+    rotationY: c3d ? c3d.getRotationY() : 0,
+    thumbnail: c3d ? c3d.captureThumbnail() : null,
   });
   setSaves(saves.slice(0, 30));
   buildSavedGrid();
@@ -970,6 +986,7 @@ function loadOutfit(id) {
   buildItemGrid();
   buildColorRow();
   paintStage();
+  if (window.Character3D) window.Character3D.setRotationY(found.rotationY || 0);
   hideScorePanel();
 }
 
@@ -989,15 +1006,18 @@ function buildSavedGrid() {
   saves.forEach((s, idx) => {
     const card = document.createElement("div");
     card.className = "saved-card";
+    const preview = s.thumbnail
+      ? `<img class="saved-thumb" src="${s.thumbnail}" alt="${s.name}" />`
+      : `<svg viewBox="0 0 300 580">${renderCharacter(s.selections, s.skin, s.bodyShape || defaultShape(), s.id)}</svg>`;
     card.innerHTML = `
-      <svg viewBox="0 0 300 580">${renderCharacter(s.selections, s.skin, s.bodyShape || defaultShape(), s.id)}</svg>
+      ${preview}
       <div class="saved-name">${s.name}</div>
       <div class="saved-card-actions">
         <button data-act="load">입히기</button>
         <button data-act="del">삭제</button>
       </div>
     `;
-    card.querySelector("svg").addEventListener("click", () => openLookbook(idx));
+    card.querySelector(s.thumbnail ? "img" : "svg").addEventListener("click", () => openLookbook(idx));
     card.querySelector('[data-act="load"]').addEventListener("click", () => loadOutfit(s.id));
     card.querySelector('[data-act="del"]').addEventListener("click", () => deleteOutfit(s.id));
     grid.appendChild(card);
@@ -1020,7 +1040,9 @@ function renderLookbook() {
   if (!saves.length) { closeLookbook(); return; }
   lookbookIndex = ((lookbookIndex % saves.length) + saves.length) % saves.length;
   const s = saves[lookbookIndex];
-  document.getElementById("lookbookSvg").innerHTML = renderCharacter(s.selections, s.skin, s.bodyShape || defaultShape(), "lb-" + s.id);
+  document.getElementById("lookbookSvg").innerHTML = s.thumbnail
+    ? `<image href="${s.thumbnail}" x="0" y="0" width="300" height="580" preserveAspectRatio="xMidYMid meet"/>`
+    : renderCharacter(s.selections, s.skin, s.bodyShape || defaultShape(), "lb-" + s.id);
   document.getElementById("lookbookName").textContent = s.name;
   const d = new Date(Number(s.id));
   document.getElementById("lookbookDate").textContent = Number.isNaN(d.getTime())
