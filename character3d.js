@@ -43,23 +43,41 @@ function latheFromKeypoints(keypoints, color, opts = {}) {
   return mesh;
 }
 
-function tubeMesh(cxWorld, topR, botR, yTop, yBot, color, seg = 16) {
-  const h = Math.max(0.02, yTop - yBot);
-  const geo = new THREE.CylinderGeometry(Math.max(0.015, topR), Math.max(0.015, botR), h, seg);
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.04 });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(cxWorld, (yTop + yBot) / 2, 0);
-  mesh.scale.z = LIMB_DEPTH;
-  return mesh;
-}
-
 function coneMesh(topR, botR, yTop, yBot, color, seg = 28) {
   const h = Math.max(0.02, yTop - yBot);
   const geo = new THREE.CylinderGeometry(Math.max(0.015, topR), Math.max(0.015, botR), h, seg);
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.66, metalness: 0.03 });
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.66, metalness: 0.03, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(0, (yTop + yBot) / 2, 0);
   mesh.scale.z = BODY_DEPTH;
+  return mesh;
+}
+
+// anatomical silhouettes: a straight 2-point taper reads as a traffic cone, so
+// limbs are lathed through a few extra waypoints (thigh/knee/calf,
+// bicep/elbow/forearm) with a small bulge/pinch at each one.
+const LEG_PROFILE = [
+  { t: 0, bulge: 0.03 }, { t: 0.22, bulge: 0.11 }, { t: 0.52, bulge: -0.15 }, { t: 0.74, bulge: 0.08 }, { t: 1, bulge: -0.08 },
+];
+const ARM_PROFILE = [
+  { t: 0, bulge: 0.04 }, { t: 0.3, bulge: 0.13 }, { t: 0.56, bulge: -0.17 }, { t: 0.78, bulge: 0.05 }, { t: 1, bulge: -0.1 },
+];
+function dampenProfile(profile, factor) {
+  return profile.map((p) => ({ t: p.t, bulge: p.bulge * factor }));
+}
+
+// contoured limb: like tubeMesh, but follows a bulge/pinch profile instead of
+// a straight line between topR and botR, for a believable thigh/knee/calf
+// (or bicep/elbow/forearm) silhouette instead of a cone.
+function contouredLimb(cxWorld, topR, botR, yTop, yBot, material, profile, seg = 20) {
+  const pts = profile.map(({ t, bulge }) => {
+    const baseR = topR + (botR - topR) * t;
+    return { y: yTop + (yBot - yTop) * t, r: Math.max(0.015, baseR * (1 + bulge)) };
+  });
+  const geo = latheGeoFromKeypoints(pts, seg);
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.position.set(cxWorld, 0, 0);
+  mesh.scale.z = LIMB_DEPTH;
   return mesh;
 }
 
@@ -134,7 +152,7 @@ const HAIR_CFG = {
 // soft, slightly glossy "skin" material shared by every flesh-tone part
 function skinMaterial(skin) {
   return new THREE.MeshPhysicalMaterial({
-    color: skin, roughness: 0.42, metalness: 0, clearcoat: 0.12, clearcoatRoughness: 0.55, sheen: 0.15, sheenColor: 0xffffff,
+    color: skin, roughness: 0.42, metalness: 0, clearcoat: 0.12, clearcoatRoughness: 0.55, sheen: 0.15, sheenColor: 0xffffff, side: THREE.DoubleSide,
   });
 }
 
@@ -170,23 +188,20 @@ function buildBody(ctx, skin) {
   group.add(head);
 
   const cxL = toX(G.armLX + G.armW / 2), cxR = toX(G.armRX + G.armW / 2);
-  const armTopR = px(G.armW * 0.52), armBotR = px(G.armW * 0.36);
+  const armTopR = px(G.armW * 0.5), armBotR = px(G.armW * 0.34);
   [cxL, cxR].forEach((cx, i) => {
-    const arm = tubeMesh(cx, armTopR, armBotR, toY(G.armY), toY(G.armBottom), skin);
-    arm.material = mat;
-    arm.rotation.z = i === 0 ? 0.09 : -0.09;
+    const side = i === 0 ? -1 : 1;
+    const arm = contouredLimb(cx, armTopR, armBotR, toY(G.armY), toY(G.armBottom), mat, ARM_PROFILE);
+    arm.rotation.z = -side * 0.09;
     group.add(arm);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(px(G.armW * 0.38), 16, 14), mat);
-    hand.scale.set(0.85, 1.1, 0.75);
-    hand.position.set(cx + (i === 0 ? -0.05 : 0.05), toY(G.handCy), 0);
+    const hand = buildHand(cx + side * 0.03, toY(G.handCy), px(G.armW), mat, side);
     group.add(hand);
   });
 
   const cxLL = toX(G.legLX + G.legW / 2), cxRL = toX(G.legRX + G.legW / 2);
-  const legTopR = px(G.legW * 0.58), legBotR = px(G.legW * 0.38);
+  const legTopR = px(G.legW * 0.56), legBotR = px(G.legW * 0.36);
   [cxLL, cxRL].forEach((cx) => {
-    const leg = tubeMesh(cx, legTopR, legBotR, toY(G.waistY), toY(G.ankleY), skin);
-    leg.material = mat;
+    const leg = contouredLimb(cx, legTopR, legBotR, toY(G.waistY), toY(G.ankleY), mat, LEG_PROFILE);
     group.add(leg);
     const foot = new THREE.Mesh(new THREE.SphereGeometry(px(19), 16, 12), mat);
     foot.scale.set(1, 0.5, 1.55);
@@ -194,6 +209,30 @@ function buildBody(ctx, skin) {
     group.add(foot);
   });
 
+  return group;
+}
+
+// a simple but genuinely finger-shaped hand: palm + four fingers + a thumb,
+// instead of a single sphere blob
+function buildHand(cx, yWorld, armWWorld, material, side) {
+  const group = new THREE.Group();
+  const palm = new THREE.Mesh(new THREE.SphereGeometry(armWWorld * 0.36, 14, 12), material);
+  palm.scale.set(0.9, 1.0, 0.68);
+  palm.position.set(cx, yWorld, 0);
+  group.add(palm);
+
+  const fingerR = armWWorld * 0.07;
+  const fingerLen = armWWorld * 0.95;
+  for (let i = 0; i < 4; i++) {
+    const spread = (i - 1.5) / 3; // -0.5 .. 0.5
+    const finger = new THREE.Mesh(new THREE.CapsuleGeometry(fingerR, fingerLen, 3, 6), material);
+    finger.position.set(cx + spread * armWWorld * 0.62, yWorld - armWWorld * 0.46 - fingerLen / 2, armWWorld * 0.22);
+    group.add(finger);
+  }
+  const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(fingerR * 1.15, fingerLen * 0.72, 3, 6), material);
+  thumb.position.set(cx - side * armWWorld * 0.42, yWorld - armWWorld * 0.08, armWWorld * 0.36);
+  thumb.rotation.z = -side * 0.95;
+  group.add(thumb);
   return group;
 }
 
@@ -303,9 +342,10 @@ function sleeveMesh(ctx, color, sleeveEndPx, widen = 4) {
   if (sleeveEndPx == null) return null;
   const topR = px(G.armW * 0.68 + widen * 0.5);
   const botR = px(G.armW * 0.5 + widen * 0.35);
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.04, side: THREE.DoubleSide });
   const group = new THREE.Group();
   [toX(G.armLX + G.armW / 2), toX(G.armRX + G.armW / 2)].forEach((cx) => {
-    group.add(tubeMesh(cx, topR, botR, toY(G.armY - 6), toY(sleeveEndPx), color));
+    group.add(contouredLimb(cx, topR, botR, toY(G.armY - 6), toY(sleeveEndPx), mat, dampenProfile(ARM_PROFILE, 0.45)));
   });
   return group;
 }
@@ -374,8 +414,10 @@ function buildBottom(ctx, id, color) {
   }
   const topR = dims.wide ? px(G.legW / 2 + 12) : px(G.legW * 0.62 + (dims.fitted ? 1 : 5));
   const botR = dims.wide ? px(G.legW / 2 + 15) : px(G.legW * 0.5 + (dims.fitted ? 0 : 3));
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.04, side: THREE.DoubleSide });
+  const profile = dims.wide ? dampenProfile(LEG_PROFILE, 0.15) : dampenProfile(LEG_PROFILE, dims.fitted ? 0.85 : 0.5);
   [toX(G.legLX + G.legW / 2), toX(G.legRX + G.legW / 2)].forEach((cx) => {
-    group.add(tubeMesh(cx, topR, botR, toY(G.waistY - 16), toY(dims.hem), color));
+    group.add(contouredLimb(cx, topR, botR, toY(G.waistY - 16), toY(dims.hem), mat, profile));
   });
   return group;
 }
@@ -474,6 +516,8 @@ function initScene() {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.08;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   canvas = renderer.domElement;
   canvas.style.width = "100%";
   canvas.style.height = "100%";
@@ -485,6 +529,13 @@ function initScene() {
   scene.add(new THREE.HemisphereLight(0xfff6ea, 0xdcd0ea, 0.85));
   const key = new THREE.DirectionalLight(0xfff1de, 0.95);
   key.position.set(2.6, 6, 5.5);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.camera.left = -1.6; key.shadow.camera.right = 1.6;
+  key.shadow.camera.top = 5.5; key.shadow.camera.bottom = -0.5;
+  key.shadow.camera.near = 1; key.shadow.camera.far = 14;
+  key.shadow.bias = -0.0015;
+  key.shadow.radius = 3;
   scene.add(key);
   const fill = new THREE.DirectionalLight(0xdfe8ff, 0.4);
   fill.position.set(-4, 2.5, 3);
@@ -492,6 +543,15 @@ function initScene() {
   const rim = new THREE.DirectionalLight(0xffe6f2, 0.5);
   rim.position.set(-1, 4, -6);
   scene.add(rim);
+
+  // soft contact shadow under the feet for a grounded, less "floating" look;
+  // ShadowMaterial only ever draws the shadow itself, so the transparent
+  // background behind the canvas still shows through everywhere else
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(6, 6), new THREE.ShadowMaterial({ opacity: 0.2 }));
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = 0;
+  ground.receiveShadow = true;
+  scene.add(ground);
 
   characterGroup = new THREE.Group();
   scene.add(characterGroup);
@@ -575,6 +635,10 @@ function update(sel, skin, shapePct) {
   characterGroup.add(buildFace(ctx, skin, sel.hair.color));
   const acc = buildAccessory(ctx, sel.accessory.id, sel.accessory.color);
   if (acc) characterGroup.add(acc);
+
+  characterGroup.traverse((obj) => {
+    if (obj.isMesh) { obj.castShadow = true; obj.receiveShadow = false; }
+  });
 
   renderer.render(scene, camera);
 }
